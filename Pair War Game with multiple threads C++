@@ -1,0 +1,531 @@
+/*
+Authors: Daniel Alonso, Eduardo Alonso
+Notes: In order to execute this program the user must enter an integer as an argument
+after the program name. This program also creates a txt file call Log File which will
+have the contents of every round played
+*/
+#include <iostream>
+#include <stdlib.h>
+#include <time.h>
+#include <pthread.h>
+#include <vector>
+#include <fstream>
+#include <stdio.h>
+
+
+using namespace std;
+
+/*
+Mutex locks in order to synchronize players and dealer
+*/
+pthread_mutex_t thread;
+pthread_mutex_t getId;
+pthread_mutex_t newDeck;
+
+/*
+Global constant variables
+*/
+const int NUM_CARDS = 52;
+const int NUM_PLAYERS = 3;
+
+/*
+Global vector data structure that will contain the deck
+in order to make easy additions and deletion of elements
+*/
+vector<int> deck;
+
+/*
+Global vector data structure that will contain a random number
+either 1 or 0 in that players will utilize to decide which card to discard
+
+
+*/
+vector<int> randomNumber;
+
+/*
+Global array data structure that will be modified at the beginning of each round
+to give players priority depending on round number
+*/
+int order[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+/*
+Global array data structure that will contain the first cards given to the players
+by the dealer
+*/
+int firstCards[NUM_PLAYERS];
+
+/*
+Integer turn will also be used to synchronize players and dealer
+by defining the begging of a round
+*/
+int turn = -1;
+
+/*
+Integer index will also be used to synchronize players and dealer
+by only allowing player or dealer access data on desired index
+*/
+int index = 0;
+
+/*
+Integer data will be used by all threads to send data between players and dealer
+*/
+int data = 0;
+
+/*
+Boolean win will determine when a single player has won a round
+*/
+bool win = false;
+
+/*
+Boolean array finish will signal the dealer when all player have finished executing
+a single round
+*/
+bool finish[NUM_PLAYERS] = {0, 0 , 0};
+
+/*
+Integer rounds keeps track of the current round
+*/
+int rounds = 1;
+
+/*
+Integer privilege will determine which player gets to go first at the start of every round
+*/
+int privilige = 1;
+
+/*
+Ofstream fout will be use to create and write to a log file which will have information
+of every round played
+*/
+ofstream fout;
+
+/*
+Void shuffleDeck will be used to shuffle a new deck every time one is created.
+The function takes an integer call seed given by the user to pass into srand()
+*/
+void shuffleDeck(int seed){
+
+    int tempData;
+    int randNumber;
+
+    srand(seed);
+
+    for(int i = 0; i < (NUM_CARDS - 1); i++){
+        tempData = deck[i];
+        randNumber = rand() % (NUM_CARDS - i) + i;
+        deck[i] = deck[randNumber];
+        deck[randNumber] = tempData;
+    }
+
+}
+
+/*
+void shuffleRandomNumber pushes 1s and 0s into randomNumber vector equal to the number of cards.
+After filling the vector it will be shuffled to be used by players in order to decide which card
+to discard
+*/
+void shuffleRandomNumber(){
+
+    int tempData;
+    int randNumber;
+
+    for (int i = 0; i < NUM_CARDS; i++){
+
+        if (i < 26){
+            randomNumber.push_back(1);
+        }
+        else{
+            randomNumber.push_back(0);
+        }
+    }
+
+    for(int i = 0; i < (NUM_CARDS - 1); i++){
+        tempData = randomNumber[i];
+        randNumber = rand() % (NUM_CARDS - i) + i;
+        randomNumber[i] = randomNumber[randNumber];
+        randomNumber[randNumber] = tempData;
+    }
+
+}
+
+/*
+Void setDeck will fill the deck vector at the beginning of every round with four sets of numbers 1-13.
+After filling the deck vector it will also call shuffleDeck() to shuffle cards and assigns the first
+3 cards inside deck to filled firstCards array. This function takes integer seed as an argument in order
+to pass it to function shuffle deck when calling it
+*/
+void setDeck(int seed){
+
+    int buffer = 1;
+
+    for (int i = 0; i < NUM_CARDS; i++){
+
+        if (buffer == 14){
+            buffer = 1;
+        }
+
+        deck.push_back(buffer);
+
+        buffer++;
+    }
+
+    for(int i = 0; i < deck.size(); i++){
+        cout << "";
+    }
+
+
+    shuffleDeck(seed);
+
+    for(int i = 0; i < deck.size(); i++){
+        cout << deck[i] << " ";
+    }
+
+    cout << endl << endl;
+
+    for(int i = 0; i < NUM_PLAYERS; i++){
+        firstCards[i] = deck[0];
+        deck.erase(deck.begin());
+    }
+
+}
+
+/*
+Void rest will be call by the dealer every time a round finishes in order to set every global variables
+and vector back to what they were before the game started. it also changes the order of elements inside
+order array in order to let other players go first depending on the value of privilege. This function
+takes integer seed as an argument in order to call function setDeck.
+*/
+void reset(int seed){
+
+    int threadID1;
+    int threadID2;
+    int threadID3;
+    deck.clear();
+    setDeck(seed);
+    randomNumber.clear();
+    shuffleRandomNumber();
+    index = 0;
+    data = -1;
+    win = false;
+
+    for(int i = 0; i < NUM_PLAYERS; i++){
+        finish[i] = false;
+    }
+
+    if(privilige == 2){
+        threadID1 = order[1];
+        threadID2 = order[4];
+        threadID3 = order[7];
+        order[1] = threadID2;
+        order[4] = threadID3;
+        order[7] = threadID1;
+    }
+    else if(privilige == 3){
+        threadID1 = order[7];
+        threadID2 = order[1];
+        threadID3 = order[4];
+        order[1] = threadID3;
+        order[4] = threadID1;
+        order[7] = threadID2;
+    }
+}
+
+/*
+Void showDeck displays every element of deck vector to the console
+*/
+void showDeck(){
+
+    for(int i = 0; i < deck.size(); i++){
+        cout << deck[i] << " ";
+    }
+
+    cout << endl << endl;
+
+}
+
+/*
+Void writeDeck writes every element of deck vector into the log file
+*/
+void writeDeck(){
+
+    fout << "Deck: ";
+
+    for(int i = 0; i < deck.size(); i++){
+        fout << deck[i] << " ";
+    }
+
+    fout << "\n\n";
+
+}
+
+void *Dealer(void *num){
+
+    /*
+    integer seed given by user to shuffle cards
+    */
+    int seed = *(int*)num;
+
+    /*
+    During the first turn order array will be filled with
+    the thtread's ID in order to help synchronize order.
+    The deck will also be created along with the random numbers
+    */
+    if(turn == -1){
+    pthread_mutex_lock(&getId);
+    order[0] = (int)pthread_self();
+    order[2] = (int)pthread_self();
+    order[3] = (int)pthread_self();
+    order[5] = (int)pthread_self();
+    order[6] = (int)pthread_self();
+    order[8] = (int)pthread_self();
+    cout << "Starting Deck: ";
+    setDeck(seed);
+    fout << "Dealer: shuffle \n\n";
+    cout << "ROUND NUMBER: " << rounds << endl << endl;
+    shuffleRandomNumber();
+    pthread_mutex_unlock(&getId);
+    }
+
+    /*
+    Inside this while loop the dealer hands cards to players as well
+    as receive discarded cards from players. At the end of every player
+    turn the content of the deck are shown. The while loop also calls
+    reset function in order to start a new round. the loop finishes after
+    the players play 3 rounds
+    */
+    while(!finish[0] || !finish[1] || !finish[2]){
+        if(((int)pthread_self()) == order[index]){
+            if(index == 0 || index == 3 || index ==6){
+                pthread_mutex_lock(&thread);
+                data = deck[0];
+                deck.erase(deck.begin());
+                index++;
+                pthread_mutex_unlock(&thread);
+            }
+            else if(index == 2 || index == 5 || index ==8){
+                pthread_mutex_lock(&thread);
+                deck.push_back(data);
+                if(!win){
+                    writeDeck();
+                }
+                index++;
+                if(index == 9){
+                    if(!win){
+                        cout << "Deck: ";
+                        showDeck();
+                    }
+                    index = 0;
+                }
+                pthread_mutex_unlock(&thread);
+            }
+        }
+
+        if(finish[0] && finish[1] && finish[2] && rounds < 3){
+            pthread_mutex_lock(&newDeck);
+            privilige++;
+            cout << "Starting Deck: ";
+            reset(seed);
+            fout << "Dealer: shuffle \n\n";
+            rounds++;
+            cout << "ROUND NUMBER: " << rounds << endl << endl;
+            pthread_mutex_unlock(&newDeck);
+        }
+    }
+
+    pthread_exit(0);
+}
+
+void *Player(void *num){
+
+    /*
+    Integer playerNumber will be unique to every thread
+    in order to help synchronize players and give turns
+    to player threads
+    */
+    int playerNumber = *(int*)num;
+
+    /*
+    Integer randNumber will pop the contents of randomNumbers
+    vector to use as an index to discard correct card
+    */
+    int randNumber;
+
+    /*
+    Integer switchingDeck will be used to determine when a new
+    deck is available in order for each player thread to grab a
+    new first card
+    */
+    int switchingDeck = 1;
+
+    /*
+    Vector data structure will be used to hold players cards in order
+    to make addition and deletion of elements easier
+    */
+    vector<int> hand;
+
+    /*
+    If/else statements in order to set up turns for every player thread
+    */
+    pthread_mutex_lock(&getId);
+    if(playerNumber == 1){
+        order[1] = (int)pthread_self();
+        hand.push_back(firstCards[0]);
+    }
+    else if(playerNumber == 2){
+        order[4] = (int)pthread_self();
+        hand.push_back(firstCards[1]);
+    }
+    else if(playerNumber == 3){
+        order[7] = (int)pthread_self();
+        hand.push_back(firstCards[2]);
+    }
+
+    pthread_mutex_unlock(&getId);
+
+    /*
+    When turn equals 1 the game is ready to begin by the dealer
+    */
+    turn = 1;
+
+    /*
+    This while loop lets players receive cards from the dealer and
+    discard cards back to the dealer.it contains an if statements that
+    will only let a single thread execute at a time in order to prevent
+    players from accessing other thread's data
+    */
+    while(!finish[playerNumber - 1]){
+        if(((int)pthread_self()) == order[index]){
+            pthread_mutex_lock(&thread);
+            if(!win){
+                fout << "PLAYER " << playerNumber  << ": " << "hand " << hand[0] << "\n\n";
+                hand.push_back(data);
+                fout << "PLAYER " << playerNumber  << ": " << "draws " << data << "\n\n";
+                cout << "PLAYER " << playerNumber  << ":" << endl;
+                cout << "HAND " << hand[0] << " " << hand[1] << endl << endl;
+            }
+            else if(win){
+
+                fout << "PLAYER " << playerNumber  << ": exits rounds"  << "\n\n";
+                hand.push_back(0);
+                cout << "PLAYER " << playerNumber  << ":" << endl;
+                cout << "HAND " << hand[0]  << endl << endl;
+                finish[playerNumber - 1] = true;
+            }
+            if(hand[0] == hand[1]){
+                fout << "PLAYER " << playerNumber  << ": " << "hand " << hand[0] << " " << hand[1] << "\n\n";
+                fout << "PLAYER " << playerNumber  << ": wins " << "\n\n";
+                fout << "PLAYER " << playerNumber  << ": exits rounds"  << "\n\n";
+                cout << "WIN yes" << endl << endl;
+                win = true;
+                data = hand[0];
+                finish[playerNumber - 1] = true;
+            }
+            else{
+
+                cout << "WIN no" << endl << endl;
+                randNumber = randomNumber[0];
+                randomNumber.erase(randomNumber.begin());
+                data = hand[randNumber];
+                hand.erase(hand.begin() + randNumber);
+                if(!win){
+                    fout << "PLAYER " << playerNumber  << ": " << "discards " << data << "\n\n";
+                    fout << "PLAYER " << playerNumber  << ": " << "hand " << hand[0] << "\n\n";
+                }
+            }
+            index++;
+            pthread_mutex_unlock(&thread);
+
+        }
+
+        if(finish[playerNumber - 1] && rounds < 3){
+            switchingDeck++;
+        }
+
+        while(finish[playerNumber - 1] && rounds < 3){
+
+
+        }
+
+        if(switchingDeck == 2){
+            pthread_mutex_lock(&newDeck);
+            hand.clear();
+            hand.push_back(firstCards[playerNumber - 1]);
+            switchingDeck--;
+            pthread_mutex_unlock(&newDeck);
+        }
+    }
+
+    pthread_exit(0);
+
+}
+
+
+
+int main(int argc, char* argv[]){
+
+    /*
+    if statement to prevent user to start program without a seed
+    */
+    if(argc < 2){
+	cout << "Please enter a seed along with program name." << endl;
+	return 0;
+    }
+
+    /*
+    value of seed given by user
+    */
+    int *seed = new int(atoi(argv[1]));
+
+    /*
+    Ofstream object to create and write to log file
+    */
+    fout.open ("Log File.txt");
+
+    /*
+    Integer pointers to give each player a distinct number
+    */
+    int *playerNumber1 = new int(1);
+    int *playerNumber2 = new int(2);
+    int *playerNumber3 = new int(3);
+
+    /*
+    creation of pthreads and mutex
+    */
+    pthread_t tid[8];
+
+
+    pthread_mutex_init(&thread, NULL);
+    pthread_mutex_init(&getId, NULL);
+    pthread_mutex_init(&newDeck, NULL);
+
+    pthread_attr_t attr1;
+    pthread_attr_t attr2;
+    pthread_attr_t attr3;
+    pthread_attr_t attr4;
+
+    pthread_attr_init(&attr1);
+    pthread_attr_init(&attr2);
+    pthread_attr_init(&attr3);
+    pthread_attr_init(&attr4);
+
+    pthread_create(&tid[0], &attr1, Dealer, seed);
+    pthread_create(&tid[1], &attr2, Player, playerNumber1);
+    pthread_create(&tid[2], &attr3, Player, playerNumber2);
+    pthread_create(&tid[3], &attr4, Player, playerNumber3);
+
+    pthread_join(tid[0], NULL);
+    pthread_join(tid[1], NULL);
+    pthread_join(tid[2], NULL);
+    pthread_join(tid[3], NULL);
+
+
+    pthread_mutex_destroy(&thread);
+    pthread_mutex_destroy(&getId);
+    pthread_mutex_destroy(&newDeck);
+
+    /*
+    closing file "Log File"
+    */
+    fout.close();
+
+    return 0;
+}

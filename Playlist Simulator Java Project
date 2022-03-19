@@ -1,0 +1,424 @@
+
+
+public class SongEntry {
+	
+	private String uniqueID;
+	private String songName;
+	private String artistName;
+	private int songLength;
+	private SongEntry nextNode;
+	
+	public SongEntry() {
+	uniqueID = "none";
+	songName = "none";
+	artistName = "none";
+	songLength = 0;
+	nextNode = null;
+	}
+	
+	public SongEntry(String uniqueID, String songName, String artistName, int songLength, SongEntry nextNode) {
+		this.uniqueID = uniqueID;
+		this.songName = songName;
+		this.artistName = artistName;
+		this.songLength = songLength;
+		this.nextNode = nextNode;
+		}
+	public SongEntry(String uniqueID, String songName, String artistName, int songLength) {
+		this.uniqueID = uniqueID;
+		this.songName = songName;
+		this.artistName = artistName;
+		this.songLength = songLength;
+		this.nextNode = null;
+		}
+	
+	public void insertAfter(SongEntry currentNode) {
+		
+		SongEntry nodePtr;
+
+	      nodePtr = nextNode;
+	      nextNode = currentNode;
+	      currentNode.nextNode = nodePtr;
+		
+	}
+	
+	public void setNext(SongEntry nextNode) {
+		this.nextNode = nextNode;
+	}
+	
+	public String getID() {
+		return uniqueID;
+	}
+	
+	public String getSongName(){
+		return songName;
+	}
+	
+	public String getArtistName() {
+		return artistName;
+	}
+	
+	public int getSongLength(){
+		return songLength;
+	}
+	
+	public SongEntry getNext(){
+		return nextNode;
+	}
+	
+	public void printPlaylistSongs(){
+		System.out.println("Unique ID: " + uniqueID);
+		System.out.println("Song Name: " + songName);
+		System.out.println("Artist Name: " + artistName);
+		System.out.println("Song Length (in seconds): " + songLength);	
+	}
+	
+	
+}
+
+
+import java.util.Scanner;
+
+public class Playlist {
+	
+	public static SongEntry head = null; 
+	public static SongEntry current = null;
+	public static SongEntry last = null;
+	
+	public static void printMenu(String playlistTitle, Scanner scnr1){
+		playlistTitle = scnr1.nextLine();
+		char input;
+		
+		do {
+			
+			System.out.println();
+			System.out.println(playlistTitle + " PLAYLIST MENU");
+			System.out.println("a - Add song");
+			System.out.println("d - Remove song");
+			System.out.println("c - Change position of song");
+			System.out.println("s - Output songs by specific artist");
+			System.out.println("t - Output total time of playlist (in seconds)");
+			System.out.println("o - Output full playlist");
+			System.out.println("q - Quit");
+			System.out.println();
+			System.out.println("Choose an option:");
+		
+			input = scnr1.next().charAt(0);
+		
+			while(input != 'a' && input != 'd' && input != 'c' && input != 's' && input != 't' && input != 'o' && input != 'q'){
+				System.out.println("Please choose a valid option");
+		
+				input = scnr1.next().charAt(0);
+			}
+			
+			if(input == 'a') {
+				addSong();
+			}
+			else if (input == 'd') {
+				removeSong();
+			}
+			else if (input == 'c') {
+				changePositionOfSong();
+			}
+			else if (input == 's') {
+				outputSongsBySpecificArtist();
+			}
+			else if (input == 't') {
+				outputTotalTimeOfPlaylist();
+			}
+			else if (input == 'o') {
+				outputFullPlaylist(playlistTitle);
+			}
+		}while(input != 'q');
+	}
+	
+	public static void addSong(){
+		
+		String uniqueID;
+		String songName;
+		String artistName;
+		int songLength;
+		
+		Scanner scnr2 = new Scanner(System.in);
+		
+		System.out.println("ADD SONG");
+		
+		System.out.println("Enter song's unique ID:");
+		uniqueID = scnr2.nextLine();
+		
+		System.out.println("Enter song's name:");
+		songName = scnr2.nextLine();
+		
+		System.out.println("Enter artist's name:");
+		artistName = scnr2.nextLine();
+		
+		System.out.println("Enter song's length (in seconds):");
+		songLength = scnr2.nextInt();
+		
+		SongEntry newSong = new SongEntry(uniqueID, songName, artistName, songLength, null);
+		
+		if(head == null) {
+			
+			head = newSong; 
+		}
+		else {
+			
+			last = head;
+			current = newSong;
+			
+		     while (last.getNext() != null) {
+		    	 
+		         last = last.getNext();
+		    }
+		     last.insertAfter(current);
+		}
+	}
+	
+	public static void outputFullPlaylist(String playlistTitle){
+		
+		int counter = 1;
+		System.out.println(playlistTitle + " - OUTPUT FULL PLAYLIST");
+		
+		if(head == null) {
+			System.out.println("Playlist is empty");
+		}
+		else {
+			current = head;
+	
+		      while (current != null) {
+		    	  System.out.println(counter + ".");
+		    	  current.printPlaylistSongs();
+		    	  current = current.getNext();
+		    	  System.out.println();
+		    	  counter++;
+		      }
+		}
+	}
+	
+	public static void outputSongsBySpecificArtist(){
+		int counter = 1;
+		Scanner scnr3 = new Scanner(System.in);
+		String name;
+		
+		System.out.println("OUTPUT SONGS BY SPECIFIC ARTIST");
+		System.out.println("Enter artist's name:");
+		
+		name = scnr3.nextLine();
+		
+		if(head == null) {
+			System.out.println("Playlist is empty");
+		}
+		else {
+			current = head;
+	
+		      while (current != null) {
+		    	  if(current.getArtistName().equals(name)) {
+		    		  System.out.println(counter + ".");
+			    	  current.printPlaylistSongs();
+			    	  System.out.println();
+		    	  }
+		    	  
+		    	  current = current.getNext();
+		    	  counter++;
+		      }
+		}
+	}
+	
+	public static void outputTotalTimeOfPlaylist(){
+		
+		int total = 0;
+		
+		System.out.println("OUTPUT TOTAL TIME OF PLAYLIST (IN SECONDS)");
+		
+		current = head;
+	
+		while (current != null) {
+			
+			total += current.getSongLength();
+		    current = current.getNext();
+		}
+		
+		System.out.println("Total time: " + total + " seconds");
+		
+	}
+	
+	public static void removeSong(){
+		
+		Scanner scnr4 = new Scanner(System.in);
+		String ID;
+		
+		if(head == null) {
+			System.out.println("Playlist is empty");
+		}
+		else {
+			
+			System.out.println("REMOVE SONG");
+			System.out.println("Enter song's unique ID:");
+			ID = scnr4.nextLine();
+			last = head;
+			String looking = last.getID();
+			
+			if(looking.equals(ID)) {
+				System.out.println("\"" + last.getSongName() + "\" removed.");
+				last = last.getNext();
+				SongEntry newHead = last;
+				head = newHead;
+			
+				
+			}
+			else {
+				SongEntry newHead = new SongEntry(last.getID(), last.getSongName(), last.getArtistName(), last.getSongLength(), null); 
+				current = newHead;
+				last = last.getNext();
+			 
+				while (last != null) {
+		    	
+					looking = last.getID();
+		    	 
+					if(!(looking.equals(ID))) {
+						SongEntry temp = new SongEntry(last.getID(), last.getSongName(), last.getArtistName(), last.getSongLength(), null);
+						newHead.insertAfter(temp);
+						newHead = newHead.getNext(); 
+					}
+					else {
+						System.out.println("\"" + last.getSongName() + "\" removed.");
+					}
+		    	 
+					last = last.getNext();
+		         
+				}
+				head = current;
+			}
+		}
+	}
+	
+	public static SongEntry removeSongPos(int position, SongEntry oldHead){	
+			
+			last = oldHead;
+			SongEntry newTempHead = null;
+			
+			if(position == 1) {
+			
+				last = last.getNext();
+				SongEntry newHead = last;
+				newTempHead = newHead;
+				
+			}
+			else {
+				SongEntry newHead = new SongEntry(last.getID(), last.getSongName(), last.getArtistName(), last.getSongLength(), null); 
+				current = newHead;
+				int counter = 2;
+				last = last.getNext();
+			 
+				while (last != null) {
+		    	 
+					if(position != counter) {
+						SongEntry temp = new SongEntry(last.getID(), last.getSongName(), last.getArtistName(), last.getSongLength(), null);
+						newHead.insertAfter(temp);
+						newHead = newHead.getNext(); 
+					}
+					counter++;
+					last = last.getNext();
+		         
+				}
+				newTempHead = current;
+			}
+			return newTempHead;
+		}
+	
+	
+	public static void changePositionOfSong(){
+		
+		Scanner scnr5 = new Scanner(System.in);
+		int currPos;
+		int newPos;
+		int count = 0;
+		
+		System.out.println("CHANGE POSITION OF SONG");
+		
+		System.out.println("Enter song's current position:");
+		currPos = scnr5.nextInt();
+		
+		System.out.println("Enter new position for song:");
+		newPos = scnr5.nextInt();
+		
+		current = head;
+		
+		while(current != null) {
+			current = current.getNext();
+			count++;
+		}
+		
+		System.out.println(count);
+		
+		 if (currPos != newPos) {
+	           int pos = 1;
+	           SongEntry song = head;
+	           SongEntry target = null;
+
+	           if (currPos == 1) {
+	               target = head;
+	               head = head.getNext();
+
+	           } else {
+	               while (pos != (currPos - 1)) {
+	                   song = song.getNext();
+	                   pos += 1;
+	               }
+
+	               target = song.getNext();
+	               song.setNext(target.getNext());
+
+	               if (currPos == count)
+	                   last = song;
+	           }
+
+	           if (newPos <= 1) {
+	               target.setNext(head);
+
+	               head = target;
+
+	              
+
+	           } else if (newPos >= count) {
+	               last.setNext(target);
+
+	               last = target;
+	               target.setNext(null);
+
+	               
+
+	           } else {
+	               song = head;
+	               pos = 1;
+
+	               while (pos != (newPos - 1)) {
+	                   song = song.getNext();
+	                   pos += 1;
+	               }
+
+	               target.setNext(song.getNext());
+	               song.setNext(target);
+
+	              
+	           }
+		 }
+		
+	}
+		
+	
+	
+
+	public static void main(String[] args) {
+		
+		String playlistTitle = "";
+		Scanner scnr = new Scanner(System.in);
+		
+		System.out.println("Enter playlist's title:");
+		
+		printMenu(playlistTitle, scnr);
+		
+		
+
+	}
+
+}

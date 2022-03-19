@@ -1,0 +1,263 @@
+#Name: Daniel Alonso
+
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import numpy as np
+from PIL import Image
+
+
+#Question 1
+
+#Reading image for question 1
+imageQuestion1 = Image.open('macaw.jpg')
+
+#New array for increased pixel value
+increased50 = np.asarray(imageQuestion1)
+#New array for decreased pixel value
+decreased50 = np.asarray(imageQuestion1)
+
+#increasing pixel values element by element if reult does not exceed 255
+for x in range(796):
+    for y in range(796):
+        if(increased50[x,y,0] < 206):
+            increased50[x,y,0] = increased50[x,y, 0] + 50
+        if(increased50[x,y,1] < 206):
+            increased50[x,y,1] = increased50[x,y, 1] + 50
+        if(increased50[x,y,2] < 206):
+            increased50[x,y,2] = increased50[x,y, 2] + 50
+
+#decreasing pixel values element by element if reult is not less than 0
+for x in range(796):
+    for y in range(796):
+        if(decreased50[x,y,0] > 50):
+            decreased50[x,y,0] = decreased50[x,y, 0] - 50
+        if(decreased50[x,y,1] > 50):
+            decreased50[x,y,1] = decreased50[x,y, 1] - 50
+        if(decreased50[x,y,2] > 50):
+            decreased50[x,y,2] = decreased50[x,y, 2] - 50
+
+#Question 2
+
+#Reading image for question 2
+imageQuestion2 = Image.open('macaw.jpg')
+#Turning image into an array
+imageLog = np.asarray(imageQuestion2)
+
+#constant to perform log transformation
+c = 255/(np.log(1 + 255))
+
+#Applying log transformation to original image array
+for x in range(796):
+    for y in range(796):
+        imageLog[x,y,0] = c * np.log(1 + imageLog[x,y,0])
+        imageLog[x,y,1] = c * np.log(1 + imageLog[x,y,1])
+        imageLog[x,y,2] = c * np.log(1 + imageLog[x,y,2])
+
+#Question 3
+
+#Reading image for question 3
+imageQuestion3 = Image.open('macaw.jpg')
+#Turning image into an array
+imageQuestion3 = np.asarray(imageQuestion3)
+
+#dividing original image array into its color parts 2D arrays
+red = imageQuestion3[:,:,0]
+green = imageQuestion3[:,:,1]
+blue = imageQuestion3[:,:,2]
+
+#Creating histogram to hold number of pixel value occurances
+histogramArrayRed = np.zeros([256])
+histogramArrayGreen = np.zeros([256])
+histogramArrayBlue = np.zeros([256])
+
+#Creating histogram arrays using a nested for loop by counting the number 
+#of instances of pixel values
+for x in range(796):
+    for y in range(796):
+        valueRed = int(red[x,y])
+        histogramArrayRed[valueRed] = histogramArrayRed[valueRed] + 1
+        valueGreen = int(green[x,y])
+        histogramArrayGreen[valueGreen] = histogramArrayGreen[valueGreen] + 1
+        valueBlue = int(blue[x,y])
+        histogramArrayBlue[valueBlue] = histogramArrayBlue[valueBlue] + 1
+
+#Creating arrays to hold CDF functions
+CDFRed = np.zeros(256)
+CDFGreen = np.zeros(256)
+CDFBlue = np.zeros(256)
+   
+#setting first element of CDF to first value of histogram array
+CDFRed[0] = histogramArrayRed[0]
+CDFGreen[0] = histogramArrayGreen[0]
+CDFBlue[0] = histogramArrayBlue[0]
+   
+#Creating CDF arrays using a nested for loop by adding histogram value to previous 
+#CDF value
+for x in range(1,256):
+    CDFRed[x] = histogramArrayRed[x] + CDFRed[x - 1]
+    CDFGreen[x] = histogramArrayGreen[x] + CDFGreen[x - 1]
+    CDFBlue[x] = histogramArrayBlue[x] + CDFBlue[x - 1]
+
+#Creating arrays to hold equalized array values
+redEqualized = np.zeros(256)
+greenEqualized = np.zeros(256)
+blueEqualized = np.zeros(256)
+
+#Creating equalized arrays using a nested for loop by using equalization formula
+for x in range(256):
+    redEqualized[x] = round(((CDFRed[x] - CDFRed[0])/((796*796) - CDFRed[0])) * 255 )
+    greenEqualized[x] = round(((CDFGreen[x] - CDFGreen[0])/((796*796) - CDFGreen[0])) * 255 )
+    blueEqualized[x] = round(((CDFBlue[x] - CDFBlue[0])/((796*796) - CDFBlue[0])) * 255 )
+    
+#Creating image array for final equalized image
+image = np.ones((796,796,3), dtype=np.uint8)
+
+#Creating image by getting pixel value from original image and adding updated 
+#pixel value to image array
+for x in range(796):
+    for y in range(796):
+        redPixelValue = imageQuestion3[x, y,0]
+        greenPixelValue = imageQuestion3[x, y,1]
+        bluePixelValue = imageQuestion3[x, y,2]
+        image[x,y, 0]  = redEqualized[redPixelValue]
+        image[x,y, 1]  = greenEqualized[greenPixelValue]
+        image[x,y, 2]  = blueEqualized[bluePixelValue]
+
+#Question 4
+
+#Reading image for question 4
+imageQuestion4 = Image.open('fruit.jpg')
+#Turning image into an array
+imageQuestion4 = np.asarray(imageQuestion4)
+
+#Creating 3x3 kernel
+neighborhood_averaging3x3 = np.ones((3,3)) / 9
+#Creating 9x9 kernel
+neighborhood_averaging9x9 = np.ones((9,9)) / 9
+
+#Creating an array that will include zeros on the edges to conserve original image size
+#for 3x3 kernel
+imageWithZeros3x3 = np.zeros((514,514),dtype=np.uint8)
+
+#Creating original image with zeros on the edges for 3x3 kernel
+for x in range(1,513):
+    for y in range(1,513):
+        imageWithZeros3x3[x,y] = imageQuestion4[x - 1, y - 1]
+
+#Creating array for image after convolution
+imageAfterConvolution3x3 = np.ones((512,512))
+
+#Applying convolution by selecting a neighborhood matrix around the pixel value
+#and multiplying kernel matrix and adding resulting values 
+for x in range(512):
+    for y in range(512):
+        neighborhood_matrix3x3 = imageWithZeros3x3[x:x+3,y:y+3]
+        imageAfterConvolution3x3[x, y] = int(np.sum(np.multiply(neighborhood_matrix3x3, neighborhood_averaging3x3)))
+
+#Creating an array that will include zeros on the edges to conserve original image size
+#for 9x9 kernel
+imageWithZeros9x9 = np.zeros((520,520),dtype=np.uint8)
+
+#Creating original image with zeros on the edges for 9x9 kernel
+for x in range(4,516):
+    for y in range(4,516):
+        imageWithZeros9x9[x,y] = imageQuestion4[x - 4, y - 4]
+
+#Creating array for image after convolution
+imageAfterConvolution9x9 = np.ones((512,512))
+
+#Applying convolution by selecting a neighborhood matrix around the pixel value
+#and multiplying kernel matrix and adding resulting values 
+for x in range(512):
+    for y in range(512):
+        neighborhood_matrix9x9 = imageWithZeros9x9[x:x+9,y:y+9]
+        imageAfterConvolution9x9[x, y] = int(np.sum(np.multiply(neighborhood_matrix9x9, neighborhood_averaging9x9)))
+        
+#Question 5
+
+#Reading image for question 5
+imageQuestion5 = Image.open('fruit.jpg')
+#Turning image into an array
+imageQuestion5 = np.asarray(imageQuestion5)
+
+#Creating 3x3 kernel for x portion of sobel kernel
+sobelX = np.array([[-1, 0, 1],   
+                [-2, 0, 2],
+                [-1, 0, 1]])
+
+#Creating 3x3 kernel for y portion of sobel kernel
+sobelY = np.array([[1, 2, 1],   
+                [0, 0, 0],
+                [-1, -2, -1]])
+
+#Creating an array that will include zeros on the edges to conserve original image size
+#for sobel edge detection 
+imageWithZerosSobel = np.zeros((514,514),dtype=np.uint8)
+
+#Creating original image with zeros on the edges for sobel edge detection
+for x in range(1,513):
+    for y in range(1,513):
+        imageWithZerosSobel[x,y] = imageQuestion5[x - 1, y - 1]
+
+#Creating array for image after convolution
+imageAfterConvolutionSobel = np.ones((512,512))
+
+#Applying convolution by selecting a neighborhood matrix around the pixel value
+#and multiplying kernel matrix and adding resulting values to x and y components
+#then taking the magnitude of components 
+for x in range(512):
+    for y in range(512):
+        neighborhood_matrix = imageWithZerosSobel[x:x+3,y:y+3]
+        convolutionX = int(np.sum(np.multiply(neighborhood_matrix, sobelX)))
+        convolutionY = int(np.sum(np.multiply(neighborhood_matrix, sobelY)))
+        imageAfterConvolutionSobel[x, y] = np.sqrt(np.square(convolutionX) + np.square(convolutionY)) 
+
+#Creating array for image after gradient matrix normalization
+SobelGradientNormalized = np.ones((512,512))
+
+#Max value for gradient normalization formula
+maxValue = imageAfterConvolutionSobel[0,0]
+
+#Finding max value inside image after convolution
+for x in range(512):
+    for y in range(512):
+        if(imageAfterConvolutionSobel[x,y] > maxValue):
+            maxValue = imageAfterConvolutionSobel[x,y]
+
+#Applying gradient normalization using formula and putting it inside normalized matrix
+for x in range(512):
+    for y in range(512):
+      SobelGradientNormalized[x, y] = imageAfterConvolutionSobel[x, y] * (255.0 / maxValue)
+      
+#Results
+
+fig = plt.figure(figsize=(14, 14))
+
+imageAfterConvolution3x3 = Image.fromarray(imageAfterConvolution3x3)
+imageAfterConvolution9x9 = Image.fromarray(imageAfterConvolution9x9)
+imageAfterConvolutionSobel = Image.fromarray(imageAfterConvolutionSobel)
+SobelGradientNormalized = Image.fromarray(SobelGradientNormalized)
+
+fig.add_subplot(4, 4, 1)
+plt.imshow(increased50)
+  
+fig.add_subplot(4, 4, 2)
+plt.imshow(decreased50)
+  
+fig.add_subplot(4, 4, 3)
+plt.imshow(imageLog)
+  
+fig.add_subplot(4, 4, 4)
+plt.imshow(image)
+
+fig.add_subplot(4, 4, 5)
+plt.imshow(imageAfterConvolution3x3)
+  
+fig.add_subplot(4, 4, 6)
+plt.imshow(imageAfterConvolution9x9)
+  
+fig.add_subplot(4, 4, 7)
+plt.imshow(imageAfterConvolutionSobel)
+  
+fig.add_subplot(4, 4, 8)
+plt.imshow(SobelGradientNormalized)

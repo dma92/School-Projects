@@ -1,0 +1,205 @@
+#************************************************************************************
+# Daniel Alonso
+# 
+#
+# Objective:
+# To develop own CNN model to classify all concrete images based on a negative label
+#if concrete is not broken and positive if its is
+#*************************************************************************************
+
+#Importing all required libraries
+
+import matplotlib
+matplotlib.use('Agg')
+import pylab as plt
+import numpy as np
+from keras import layers
+from keras import models
+from keras.preprocessing.image import ImageDataGenerator
+from keras import optimizers
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score, f1_score
+from sklearn.metrics import confusion_matrix
+
+def loss_accuracy_plots(history):
+    
+    #Getting accuracy values
+    
+    acc = history.history['acc']
+    val_acc = history.history['val_acc']
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+    
+    epochs = range(1, len(acc) + 1)
+    
+    fig, axes = plt.subplots(1,2, figsize=(14,6))
+    
+    axes[0].plot(epochs, acc, 'bo', label='Training acc')
+    axes[0].plot(epochs, val_acc, 'b', label='Validation acc')
+    axes[0].set_xlabel('Epochs')
+    axes[0].set_ylabel('Accuracy')
+    axes[0].set_title('Training and validation accuracy')
+    axes[0].set_xlim(0, 11)
+    axes[0].set_ylim(0, 1.1)
+    axes[0].legend()
+    
+    
+    axes[1].plot(epochs, loss, 'bo', label='Training loss')
+    axes[1].plot(epochs, val_loss, 'b', label='Validation loss')
+    axes[1].set_xlabel('Epochs')
+    axes[1].set_ylabel('Loss')
+    axes[1].set_title('Training and validation loss')
+    axes[1].set_xlim(0, 11)
+    axes[1].set_ylim(0, 1.1)
+    axes[1].legend()
+    
+    fig.savefig("Loss_Accuracy_plots.png")
+    
+def confusion_matrix_plot(yTrue, yPred):
+    
+    plt.figure()
+    
+    #Calculating confusion matrix
+    
+    cm = confusion_matrix(yTrue, yPred)
+    plt.matshow(cm, cmap=plt.cm.Blues, alpha=0.3)
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(x=j, y=i, s=cm[i, j], va='center', ha='center')
+            
+    plt.xlabel('predicted label')
+    plt.ylabel('true label')
+    plt.savefig('confusion_matrix.png')
+    plt.show()
+
+def main():
+    
+    #Directories to pass images into image generators
+    
+    train_dir = r'Concrete Crack Images for Classification/train'
+    validation_dir = r'Concrete Crack Images for Classification/validation'
+    test_dir = r'Concrete Crack Images for Classification/test'
+    
+    #Creating image generators
+    
+    train_datagen = ImageDataGenerator(rescale=1./255)
+    test_datagen = ImageDataGenerator(rescale=1./255)
+    
+    #Getting images with binary mode to create negative and positive labels
+    #for training, validation, and testing
+    
+    train_generator = train_datagen.flow_from_directory(train_dir, target_size=(227, 227), 
+                                                        color_mode='rgb', batch_size=32, 
+                                                        class_mode='binary')
+    
+    validation_generator = test_datagen.flow_from_directory(validation_dir, target_size=(227, 227),
+                                                            color_mode='rgb', batch_size=32, 
+                                                            class_mode='binary')
+    
+    test_generator = test_datagen.flow_from_directory(test_dir, target_size=(227, 227), 
+                                                        color_mode='rgb', batch_size=32, 
+                                                        class_mode='binary', shuffle = False)
+        
+    #Creating CNN model with 6 convolution layers, 5 MaxPools to create final
+    #3x3 images a dropout layer was also added to increase accuracy. A sigmoid 
+    #activation function was used for binary predictions
+    
+    model = models.Sequential()
+    
+    model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(227, 227, 3)))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+    
+    model.add(layers.Flatten())
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(64, activation='relu'))
+    model.add(layers.Dense(1, activation='sigmoid'))
+    
+    #Configuring the model compilation
+    
+    model.compile(loss='binary_crossentropy', 
+                  optimizer=optimizers.RMSprop(lr=1e-4), metrics=['acc'])
+ 
+    #Training the model
+    history = model.fit_generator(train_generator, steps_per_epoch=100, epochs=10, 
+                                  validation_data=validation_generator, validation_steps=50)
+    
+    #Getting accuracy values for testing and validation
+    
+    acc = history.history['acc']
+    val_acc = history.history['val_acc']
+    
+    #Testing predictions
+    
+    predictions = model.predict_generator(test_generator, steps = 4000 )
+
+    #Creating array to hold binary values 0 or 1 instead of probabilities outputed
+    #by model.predict
+    
+    results = np.zeros((4000), dtype=(np.uint8))
+    for i in range(4000):
+        if(predictions[i] < 0.5):
+            results[i] = 0
+        else:
+            results[i] = 1
+    
+
+    #Printing accuracy data to console
+    
+    print('Misclassified samples: %d' % (test_generator.classes != results).sum())
+    print('Training Accuracy: %.2f' % acc[9])
+    print('Validation Accuracy: %.2f' % val_acc[9])
+    print('Test Accuracy: %.2f' % (1 - ((test_generator.classes != results).sum()/4000)))
+    print('Precision: %.2f' % precision_score(y_true=test_generator.classes, 
+                                              y_pred=results, average='binary'))
+    print('Recall: %.2f' % recall_score(y_true=test_generator.classes, 
+                                        y_pred=results, average='binary'))
+    print('F1: %.2f' % f1_score(y_true=test_generator.classes, 
+                                y_pred=results, average='binary'))
+    
+    #Printing accuracy data to txt file
+    
+    with open("CNN_accuracy.txt", "w") as f:
+        f.write('CNN accuracy:')
+        f.write('\n')
+        f.write('Misclassified samples: %d' % (test_generator.classes != results).sum())
+        f.write('\n')
+        f.write('Training Accuracy: %.2f' % acc[9])
+        f.write('\n')
+        f.write('Validation Accuracy: %.2f' % val_acc[9])
+        f.write('\n')
+        f.write('Test Accuracy: %.2f' % (1 - ((test_generator.classes != results).sum()/4000)))
+        f.write('\n')
+        f.write('Precision: %.2f' % precision_score(y_true=test_generator.classes, 
+                                                  y_pred=results, average='binary'))
+        f.write('\n')
+        f.write('Recall: %.2f' % recall_score(y_true=test_generator.classes, 
+                                            y_pred=results, average='binary'))
+        f.write('\n')
+        f.write('F1: %.2f' % f1_score(y_true=test_generator.classes, 
+                                    y_pred=results, average='binary'))
+        f.write('\n')
+        f.write('\n')
+    
+    #Plotting confusion matrix
+    
+    confusion_matrix_plot(test_generator.classes, results)
+    
+    #Plotting loss accuracy 
+    
+    loss_accuracy_plots(history)
+    
+main()

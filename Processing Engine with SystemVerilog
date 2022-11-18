@@ -1,0 +1,495 @@
+module Execution(Clk,InstructDataOut,MemDataOut,MatrixDataOut,IntDataOut,ExeDataOut, address, nRead,nWrite, nReset);
+  
+  input logic Clk, nReset;
+  input logic [255:0] MemDataOut, InstructDataOut, MatrixDataOut,IntDataOut;
+  
+  output logic nRead;
+  output logic nWrite;
+  output logic [15:0] address;
+  output logic [255:0] ExeDataOut;
+  
+  logic [7:0] PC;
+  logic [31:0] instruction;
+  logic [7:0] Opcode;
+  logic [255:0] register[3];
+  logic [255:0] InternalReg[2];
+  
+  parameter MainMemEn = 0;
+  parameter InstrMemEn = 1;
+  parameter MatrixAluEn = 2;
+  parameter IntAluEn = 3;
+  parameter ExecuteEn = 5;
+  
+  parameter Stop = 8'hFF;
+  parameter MatrixMultiply = 8'h00;
+  parameter MatrixAdd = 8'h01;
+  parameter MatrxSubtract = 8'h02;
+  parameter MatrixTranspose = 8'h03;
+  parameter MatrixScale = 8'h04;
+  parameter MatrixScaleImmediate = 8'h05;
+  parameter IntAdd = 8'h10;
+  parameter IntSubtract = 8'h11;
+  parameter IntMultiply = 8'h12;
+  parameter IntDivide = 8'h13;
+  
+  
+  
+  enum{read_instruct, read_instruct_data, decode_instruct,
+       set_address1, set_address2, set_address3,m_address1, m_address2, get_data1, get_data2,send_data1,send_data2, start_Alu, get_addition, store_data, finish} state, next_state; 
+ 
+  always_comb
+  begin
+    if(nReset)
+    begin
+      case(state)
+      	read_instruct:
+        begin
+          address[15:12] = InstrMemEn;
+          address[11:0] = PC;
+          nRead = 0;
+          next_state = read_instruct_data;
+        end
+        read_instruct_data:
+        begin
+          instruction = InstructDataOut;
+          Opcode = instruction[31:24];
+          nRead = 1;
+          next_state = decode_instruct;
+        end
+        decode_instruct:
+        begin
+          if(Opcode == Stop)
+          	$finish;
+          else if(Opcode == MatrixMultiply)
+            next_state = set_address1;
+          else if(Opcode == MatrixAdd)
+            next_state = set_address1;
+          else if(Opcode == MatrxSubtract)
+            next_state = set_address1;
+          else if(Opcode == MatrixTranspose)
+            next_state = set_address1;
+          else if(Opcode == MatrixScale)
+            next_state = set_address1;   
+          else if(Opcode == MatrixScaleImmediate)
+            next_state = set_address1;   
+          else if(Opcode == IntAdd)
+            next_state = set_address1;
+          else if(Opcode == IntSubtract)
+            next_state = set_address1;
+          else if(Opcode == IntMultiply)
+            next_state = set_address1;   
+          else if(Opcode == IntDivide)
+            next_state = set_address1;   
+        end
+        set_address1:
+        begin
+          if(instruction[15:8] > 8'h0f)
+          begin
+          	next_state = m_address1;
+          end
+          else
+            address[15:12] = MainMemEn;
+            address[11:0] = instruction[15:8];
+            nRead = 0;
+            next_state = get_data1;
+        end
+        get_data1:
+        begin
+          register[0] = MemDataOut;
+          nRead = 1;
+          next_state = m_address1;
+        end
+        m_address1:
+        begin
+          if(Opcode == MatrixMultiply || Opcode == MatrixAdd || Opcode == MatrxSubtract || Opcode == MatrixTranspose || Opcode == MatrixScale || Opcode == MatrixScaleImmediate) 
+          	address[15:12] = MatrixAluEn;
+          else
+            address[15:12] = IntAluEn;
+          address[11:0] = 0;
+          nWrite = 0;
+          next_state = send_data1;
+        end
+        send_data1:
+        begin
+          ExeDataOut = register[0];
+          if(Opcode == MatrixTranspose)
+          	next_state = start_Alu;
+          else if(instruction[7:0] > 8'h0f)
+          	next_state = m_address2;
+          else
+            next_state = set_address2;
+        end
+        set_address2:
+        begin
+          nWrite = 1;
+          address[15:12] = MainMemEn;
+          address[11:0] = instruction[7:0];
+          nRead = 0;
+          next_state = get_data2;
+        end
+        get_data2:
+        begin
+          register[1] = MemDataOut;
+          nRead = 1;
+          next_state = m_address2;
+        end
+        m_address2:
+        begin
+          if(Opcode == MatrixMultiply || Opcode == MatrixAdd || Opcode == MatrxSubtract || Opcode == MatrixTranspose || Opcode == MatrixScale || Opcode == MatrixScaleImmediate) 
+          	address[15:12] = MatrixAluEn;
+          else
+            address[15:12] = IntAluEn;
+          address[11:0] = 1;
+          nWrite = 0;
+          next_state = send_data2;
+        end
+        send_data2:
+        begin
+          if(instruction[7:0] > 8'h0f)
+            ExeDataOut = InternalReg[instruction[7:0] - 16];
+          else
+            ExeDataOut = register[1];
+          next_state = start_Alu;
+        end
+        start_Alu:
+        begin
+          address[11:0] = 3;
+          ExeDataOut = Opcode;
+          next_state = get_addition;
+        end
+        get_addition:
+        begin
+          if(Opcode == MatrixMultiply || Opcode == MatrixAdd || Opcode == MatrxSubtract || Opcode == MatrixTranspose || Opcode == MatrixScale || Opcode == MatrixScaleImmediate) 
+          begin
+          	register[2] = MatrixDataOut;
+            nWrite = 1;
+          	next_state = set_address3;
+          end
+          else if(instruction[23:16] > 8'h0f)
+          begin
+            InternalReg[instruction[23:16] - 16] = IntDataOut;
+            nWrite = 1;
+          	next_state = finish;
+          end
+          else
+          begin
+            register[2] = IntDataOut;
+            nWrite = 1;
+          	next_state = set_address3;
+          end
+        end
+        set_address3:
+        begin
+          address[15:12] = MainMemEn;
+          address[11:0] = instruction[23:16];
+          nWrite = 0;
+          next_state = store_data;
+        end
+        store_data:
+        begin
+          ExeDataOut = register[2];
+          next_state = finish;
+        end
+        finish:
+        begin
+          nWrite = 1;
+          nRead = 1;
+          address = 0;
+          ExeDataOut = 0;
+          PC = PC + 1;
+          next_state = read_instruct;
+        end
+      endcase
+    end
+    else begin
+      PC = 0;
+      nWrite = 1;
+      nRead = 1;
+      address = 0;
+      ExeDataOut = 0;
+    end
+    
+  end
+ 
+  always_ff @ (negedge Clk or negedge nReset)begin
+    if(!nReset)begin
+      state <= read_instruct;
+    end
+    else begin
+     state <= next_state;
+    end 
+  end   
+   
+  
+endmodule
+
+module InstructionMemory(Clk,InstructDataOut, address, nRead,nReset);
+  
+  input logic nRead, nReset, Clk;
+  input logic [15:0] address;
+  
+  output logic [255:0] InstructDataOut;
+
+  logic [255:0] InstructMemory[10];
+  
+//////////////////////////////////////////
+  parameter InstrucMemEn = 1;
+
+////////// instruction memory parameters. To be loaded into instruction memory 
+  
+    parameter Instruct1 = 32'h 01_02_00_01; // add first matrix to second matrix store in memory
+parameter Instruct2 = 32'h 10_10_09_08; // add 16 bit numbers in location 8 to 9 store in temp register
+parameter Instruct3 = 32'h 02_03_02_00; //Subtract the first matrix from the result in step 1 and store the result somewhere else in memory. 
+parameter Instruct4 = 32'h 03_04_02_00;//Transpose the result from step 1 store in memory
+parameter Instruct5 = 32'h 05_05_03_10;//Scale the result in step 3 by the result from step 2 store in a matrix register
+parameter Instruct6 = 32'h 00_06_04_03; //Multiply the result from step 4 by the result in step 3, store in memory.
+
+parameter Instruct7 = 32'h 12_0a_01_00;//Multiply the integer value in memory location 0 to location 1. Store it in memory location 0x0A
+parameter Instruct8 = 32'h 11_11_0a_01;//Subtract the integer value in memory location 01 from memory location 0x0A and store it in a register
+parameter Instruct9 = 32'h 13_0b_0a_11;//Divide Memory location 0x0A by the register in step 8 and store it in location 0x0B
+parameter Instruct10 = 32'h FF_00_00_00; // stop
+
+ 
+  always_ff @ (negedge Clk or negedge nReset)
+  begin    
+    if(!nReset)
+      begin//Sets data coming out to zero and loads instructions when reset goes low
+    	  InstructDataOut <= 0;
+          InstructMemory[0] <= Instruct1;
+          InstructMemory[1] <= Instruct2;
+          InstructMemory[2] <= Instruct3;
+          InstructMemory[3] <= Instruct4;
+          InstructMemory[4] <= Instruct5;
+          InstructMemory[5] <= Instruct6;
+          InstructMemory[6] <= Instruct7;
+          InstructMemory[7] <= Instruct8;
+          InstructMemory[8] <= Instruct9;
+          InstructMemory[9] <= Instruct10;
+      end
+      else
+      begin
+        if(address[15:12] == InstrucMemEn)//check if address asks for this module
+        begin
+          if(!nRead)//sends instruction memory locations to be read when read is low
+          begin
+              InstructDataOut <= InstructMemory[address[11:0]];
+          end
+        end
+      end
+	end
+ 
+endmodule
+
+module MainMemory(Clk, MemDataOut, ExeDataOut, address, nRead, nWrite, nReset);
+  
+  input logic nRead, nWrite, nReset, Clk;
+  input logic [15:0] address;
+  input logic [255:0] ExeDataOut;
+  
+  output logic [255:0] MemDataOut;
+  
+  logic [255:0] MainMemory[12];
+  
+  parameter MainMemEn = 0;//Parameter used to choose module within address
+  
+  always_ff @ (negedge Clk or negedge nReset)
+  begin
+    if(!nReset)//Sets data coming out to zero and sets arrays to 0
+    begin
+      MainMemory[0] = 256'h0008_000c_0008_0006_000c_0010_000d_0009_0009_0013_0005_000d_000c_0003_000a_0010;
+	  MainMemory[1] = 256'h000e_0004_0007_000f_0007_0008_000e_0007_0010_0009_0014_000b_000c_0005_0012_0006;
+      MainMemory[2] = 256'h0;
+      MainMemory[3] = 256'h0;
+      MainMemory[4] = 256'h0;
+      MainMemory[5] = 256'h0;
+      MainMemory[6] = 256'h0;
+      MainMemory[7] = 256'h0;
+      MainMemory[8] = 256'h7;
+      MainMemory[9] = 256'hf;
+      MainMemory[10] = 256'h0;
+      MainMemory[11] = 256'h0;
+      MemDataOut <= 0;
+    end
+    else if(address[15:12] == MainMemEn)//check if address asks for this module
+    begin 
+       if(!nRead)//sends memory locations to be read when read is low
+       begin
+          MemDataOut <= MainMemory[address[11:0]];
+       end
+
+      if(!nWrite)//recieves intructions to be written to requested location
+       begin
+            MainMemory[address[11:0]] <= ExeDataOut;
+       end
+	end
+  end
+endmodule 
+
+module MatrixAlu(Clk,MatrixDataOut,ExeDataOut, address, nRead,nWrite, nReset);
+	
+  input logic Clk, nRead, nWrite, nReset;
+  input logic [15:0] address;
+  input logic [255:0] ExeDataOut;
+  
+  output logic [255:0] MatrixDataOut;
+  
+  logic [255:0] register [3];
+  
+  parameter AluEn = 2;
+  
+  parameter MatrixMultiply = 8'h00;
+  parameter MatrixAdd = 8'h01;
+  parameter MatrxSubtract = 8'h02;
+  parameter MatrixTranspose = 8'h03;
+  parameter MatrixScale = 8'h04;
+  parameter MatrixScaleImmediate = 8'h05;
+  
+  always_ff @ (negedge Clk or negedge nReset)
+  begin
+    if(!nReset)//Sets data coming out to zero and sets arrays to 0
+    begin
+    	register[0] <= 256 'h0;
+        register[1] <= 256 'h0;
+        register[2] <= 256'h0;
+        MatrixDataOut <= 0;
+    end
+    else if(address[15:12] == AluEn)//check if address asks for this module
+    begin 
+      
+      if(!nWrite)//recieves intructions to be written to requested location or start operation
+       begin
+         
+         if(address[11:0] == 3)
+         
+         begin
+           case(ExeDataOut[7:0])//case statements that reads opcode
+              MatrixMultiply:
+              begin//row 0
+                register[2][255:240] =((register[0][255:240] *register[1][255:240])+(register[0][239:224] *register[1][191:176])+(register[0][223:208] *register[1][127:112])+(register[0][207:192] *register[1][63:48]));
+                
+                register[2][239:224] =((register[0][255:240] *register[1][239:224])+(register[0][239:224] *register[1][175:160])+(register[0][223:208] *register[1][111:96])+(register[0][207:192] *register[1][47:32]));
+                
+                register[2][223:208] =((register[0][255:240] *register[1][223:208])+(register[0][239:224] *register[1][159:144])+(register[0][223:208] *register[1][95:80])+(register[0][207:192] *register[1][31:16]));
+                
+                register[2][207:192] =((register[0][255:240] *register[1][207:192])+(register[0][239:224] *register[1][143:128])+(register[0][223:208] *register[1][79:64])+(register[0][207:192] *register[1][15:0]));
+                //row 1
+                register[2][191:176] =((register[0][191:176] *register[1][255:240])+(register[0][175:160] *register[1][191:176])+(register[0][159:144] *register[1][127:112])+(register[0][143:128] *register[1][63:48]));
+                
+                register[2][175:160] =((register[0][191:176] *register[1][239:224])+(register[0][175:160] *register[1][175:160])+(register[0][159:144] *register[1][111:96])+(register[0][143:128] *register[1][47:32]));
+                
+                register[2][159:144] =((register[0][191:176] *register[1][223:208])+(register[0][175:160] *register[1][159:144])+(register[0][159:144] *register[1][95:80])+(register[0][143:128] *register[1][31:16]));
+                
+                register[2][143:128] =((register[0][191:176] *register[1][207:192])+(register[0][175:160] *register[1][143:128])+(register[0][159:144] *register[1][79:64])+(register[0][143:128] *register[1][15:0]));
+                //row 2
+                register[2][127:112] =((register[0][127:112] *register[1][255:240])+(register[0][111:96] *register[1][191:176])+(register[0][95:80] *register[1][127:112])+(register[0][79:64] *register[1][63:48]));
+                
+                register[2][111:96] =((register[0][127:112] *register[1][239:224])+(register[0][111:96] *register[1][175:160])+(register[0][95:80] *register[1][111:96])+(register[0][79:64] *register[1][47:32]));
+                
+                register[2][95:80] =((register[0][127:112] *register[1][223:208])+(register[0][111:96] *register[1][159:144])+(register[0][95:80] *register[1][95:80])+(register[0][79:64] *register[1][31:16]));
+                
+                register[2][79:64] =((register[0][127:112] *register[1][207:192])+(register[0][111:96] *register[1][143:128])+(register[0][95:80] *register[1][79:64])+(register[0][79:64] *register[1][15:0]));
+                //row 3
+                register[2][63:48] =((register[0][63:48] *register[1][255:240])+(register[0][47:32] *register[1][191:176])+(register[0][31:16] *register[1][127:112])+(register[0][15:0] *register[1][63:48]));
+                
+                register[2][47:32] =((register[0][63:48] *register[1][239:224])+(register[0][47:32] *register[1][175:160])+(register[0][31:16] *register[1][111:96])+(register[0][15:0] *register[1][47:32]));
+                
+                register[2][31:16] =((register[0][63:48] *register[1][223:208])+(register[0][47:32] *register[1][159:144])+(register[0][31:16] *register[1][95:80])+(register[0][15:0] *register[1][31:16]));
+                
+                register[2][15:0] =((register[0][63:48] *register[1][207:192])+(register[0][47:32] *register[1][143:128])+(register[0][31:16] *register[1][79:64])+(register[0][15:0] *register[1][15:0]));
+                
+                MatrixDataOut = register[2];
+              end
+              MatrixAdd: MatrixDataOut = register[0] + register[1];
+              MatrxSubtract: MatrixDataOut = register[0] - register[1];
+              MatrixTranspose:
+              begin
+                register[1][255:240] = register[0][255:240];
+                register[1][239:224] = register[0][191:176];
+                register[1][223:208] = register[0][127:112];
+                register[1][207:192] = register[0][63:48];
+                register[1][191:176] = register[0][239:224];
+                register[1][175:160] = register[0][175:160];
+                register[1][159:144] = register[0][111:96];
+                register[1][143:128] = register[0][47:32];
+                register[1][127:112] = register[0][223:208];
+                register[1][111:96] = register[0][159:144];
+                register[1][95:80] = register[0][95:80];
+                register[1][79:64] = register[0][31:16];
+                register[1][63:48] = register[0][207:192];
+                register[1][47:32] = register[0][143:128];
+                register[1][31:16] = register[0][79:64];
+                register[1][15:0] = register[0][15:0];
+                MatrixDataOut = register[1];
+              end
+             MatrixScale: MatrixDataOut = register[0] * register[1];
+              MatrixScaleImmediate: MatrixDataOut = register[0] * register[1];
+            default: MatrixDataOut = 0;
+            endcase
+         end
+         else
+         begin//stores data in registers
+         	register[address[11:0]] <= ExeDataOut;
+         end
+       end
+	end
+  end
+  
+endmodule
+
+module IntegerAlu(Clk,IntDataOut,ExeDataOut, address, nRead,nWrite, nReset);
+
+  //Input Data
+  input logic Clk, nRead, nWrite, nReset;
+  input logic [15:0] address;
+  input logic [255:0] ExeDataOut;
+  
+  //Output Data
+  output logic [255:0] IntDataOut;
+  
+  //registers to hold the data to be operated
+  logic [255:0] Source [2];
+  
+  // This is the memory locations for the system.
+/////////////////////////////////////////////
+ 
+  parameter IntAlu = 3;
+  
+  parameter IntAdd = 8'h10;
+  parameter IntSubtract = 8'h11;
+  parameter IntMultiply = 8'h12;
+  parameter IntDivide = 8'h13;
+  
+  always_ff @ (negedge Clk or negedge nReset)
+  begin
+    if(!nReset)//Sets data coming out to zero and sets arrays to 0
+    begin
+    	Source[0] <= 256 'h0;
+        Source[1] <= 256 'h0;
+        IntDataOut <= 0; 
+    end
+    else if(address[15:12] == IntAlu)//check if address asks for this module
+    begin 
+      
+      if(!nWrite)//recieves intructions to be written to requested location or start operation
+       begin
+         
+         if(address[11:0] == 3)
+         
+         begin
+           case(ExeDataOut[7:0])//case statements that reads opcode
+              IntAdd: IntDataOut = Source[0] + Source[1];
+              IntSubtract: IntDataOut = Source[0] - Source[1];
+              IntMultiply: IntDataOut = Source[0] * Source[1];
+              IntDivide: IntDataOut = Source[0] / Source[1];
+            default: IntDataOut = 0;
+            endcase
+         end
+         else
+         begin//stores data in registers
+         	Source[address[11:0]] <= ExeDataOut;
+         end
+       end
+	end
+  end
+  
+endmodule 

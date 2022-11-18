@@ -1,0 +1,217 @@
+#************************************************************************************
+# Daniel Alonso
+#
+# Objective:
+# To analyze and predict data using GridSearchCV to find best parameters of 
+# a voting classifier training model
+#
+#*************************************************************************************
+
+#Importing all required libraries
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC 
+from sklearn.linear_model import LogisticRegression 
+import matplotlib
+matplotlib.use('Agg')
+import pylab as plt
+from matplotlib.colors import ListedColormap
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.pipeline import make_pipeline
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score, f1_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import VotingClassifier
+
+def plot_decision_regions(gs, x, y, xTrain, yTrain, test_idx=None, resolution=0.02):
+    markers = ('s','x','o', 'P' )
+    colors = ('red', 'blue', 'lightgreen', 'black')
+    cmap = ListedColormap(colors[:len(np.unique(y))])
+    
+    clf = gs.best_estimator_
+    clf.fit(xTrain, yTrain)
+    
+    # Plot the decision surface  
+    x1_min, x1_max = x[:, 0].min() - 1, x[:, 0].max() + 1
+    x2_min, x2_max = x[:, 1].min() - 1, x[:, 1].max() + 1
+    xx1, xx2 = np.meshgrid(np.arange(x1_min, x1_max, resolution),np.arange(x2_min, x2_max, resolution))
+    Z = clf.predict(np.array([xx1.ravel(), xx2.ravel()]).T)
+    Z = Z.reshape(xx1.shape)
+    plt.contourf(xx1, xx2, Z, alpha=0.4, cmap=cmap)
+    plt.xlim(xx1.min(), xx1.max())
+    plt.ylim(xx2.min(), xx2.max())
+    
+    #Plot all the samples
+    X_test = x[test_idx,:]
+    for idx,cl in enumerate(np.unique(y)):
+        plt.scatter(x=x[y==cl,0],y=x[y==cl,1],alpha=0.8,c=cmap(idx),marker=markers[idx],label=cl)
+    #Highlight test samples
+    if test_idx:
+        X_test = x[test_idx,:]
+        plt.scatter(X_test[:,0],X_test[:,1],c='',alpha=1.0,linewidths=1,marker='o',s=55,label='test set')
+        
+    plt.xlabel('Feature 2 [Standardized]')
+    plt.ylabel('Feature 1 [standardized]')
+    plt.title("Decision Regions")
+    plt.legend()
+    
+def main():
+    
+    #Downloading the dataset, creating dataframe
+    
+        #Importing from train dataset
+    dataFrameTrain = pd.read_excel('Data_User_Modeling_Dataset_Hamdi Tolga KAHRAMAN.xls', sheet_name='Training_Data')
+        #Importing from test dataset
+    dataFrameTest = pd.read_excel('Data_User_Modeling_Dataset_Hamdi Tolga KAHRAMAN.xls', sheet_name='Test_Data')
+    
+    #Separating data & target information
+    
+        #Creating arrays to store data
+    x = np.zeros((403,5))
+    y = np.zeros((403))
+    
+        #Passing features into x array
+    x[:258, :5] = dataFrameTrain.values[:,:5] 
+    x[258:403, :5] = dataFrameTest.values[:,:5]
+    
+        #Passing targets into y array
+    for i in range(258):
+        
+        if(dataFrameTrain.values[i,5]  == 'very_low'):
+            y[i] = 1
+        elif(dataFrameTrain.values[i,5] == 'Low'):
+            y[i] = 2
+        elif(dataFrameTrain.values[i,5] == 'Middle'):
+            y[i] = 3
+        elif(dataFrameTrain.values[i,5] == 'High'):
+            y[i] = 4
+            
+    for i in range (258,403):
+        
+        if(dataFrameTest.values[i - 258,5]  == 'Very Low'):
+            y[i] = 1
+        elif(dataFrameTest.values[i - 258,5] == 'Low'):
+            y[i] = 2
+        elif(dataFrameTest.values[i - 258,5] == 'Middle'):
+            y[i] = 3
+        elif(dataFrameTest.values[i - 258,5] == 'High'):
+            y[i] = 4
+    
+    #Data split for training and testing
+    
+    xTrain, xTest, yTrain, yTest = train_test_split(x, y, test_size=0.3, 
+    random_state=1, stratify=y)
+    
+    #Scaling training data
+    
+    sc = StandardScaler()
+    sc.fit(xTrain)
+    sc.fit(xTest)
+    xTrainStd = sc.transform(xTrain)
+    xTestStd = sc.transform(xTest)
+    
+    #Creating pipeline with LDA, standaizer and training method
+    
+    pipe_lr = make_pipeline(LDA(solver='eigen', n_components=2), StandardScaler(), 
+                            LogisticRegression(random_state=1, max_iter=10000))
+    pipe_svm = make_pipeline(LDA(solver='eigen', n_components=2), StandardScaler(), 
+                             SVC(random_state=1, probability=True))
+    pipe_tree = make_pipeline(LDA(solver='eigen', n_components=2), StandardScaler(),
+                             DecisionTreeClassifier(random_state=1))
+    
+    #Creating voting classifier
+    
+    mv_clf = VotingClassifier(estimators=[('lr', pipe_lr), 
+                                          ('tree', pipe_tree), ('svm', pipe_svm)], voting='soft')
+    
+    #Creating parameters to load into GridSearchCV
+    
+    CParams = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
+    solverParams = ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga']
+    
+    CvalueParams = [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
+    kernelParams = ['poly', 'rbf', 'sigmoid']
+    
+    depthParams = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, None]
+    criterionParams = ['gini', 'entropy']
+    splitterParams = ['best', 'random']
+    
+    #Loading parameters into GridSearchCV
+    
+    parameters = [{'tree__decisiontreeclassifier__max_depth': depthParams, 
+                   'tree__decisiontreeclassifier__criterion': criterionParams,
+                   'tree__decisiontreeclassifier__splitter': splitterParams},
+                  {'svm__svc__C': CvalueParams, 'svm__svc__kernel': ['linear']},
+                  {'svm__svc__C': CvalueParams, 'svm__svc__kernel': kernelParams,
+                   'svm__svc__gamma': CvalueParams},
+                  {'lr__logisticregression__C': CParams,
+                   'lr__logisticregression__solver': solverParams}]
+    
+    #Creating GridSearchCV to look for best accuracy
+    
+    gs = GridSearchCV(estimator=mv_clf, param_grid=parameters, 
+                        cv=10, scoring='accuracy')
+    
+    #Training the model
+                 
+    gs.fit(xTrainStd, yTrain)
+    
+    #Testing the model data
+    
+    yPred = gs.predict(xTestStd)
+    
+    #Printing accuracy data to console
+    
+    print('Misclassified samples: %d' % (yTest != yPred).sum())
+    print('Training Accuracy: %.2f' % gs.score(xTrainStd, yTrain))
+    print('Test Accuracy: %.2f' % gs.score(xTestStd, yTest))
+    print('Precision: %.2f' % precision_score(y_true=yTest, y_pred=yPred, average='micro'))
+    print('Recall: %.2f' % recall_score(y_true=yTest, y_pred=yPred, average='micro'))
+    print('F1: %.2f' % f1_score(y_true=yTest, y_pred=yPred, average='micro'))
+    
+    #Printing accuracy data to txt file
+    
+    with open("EnsembleLearning_accuracy.txt", "a") as f:
+        f.write('Ensemble Learning accuracy:')
+        f.write('\n')
+        f.write('Best parameters: ')
+        f.write(str(gs.best_params_))
+        f.write('\n')
+        f.write('Misclassified samples: %d' % (yTest != yPred).sum())
+        f.write('\n')
+        f.write('Training Accuracy: %.2f' % gs.score(xTrainStd, yTrain))
+        f.write('\n')
+        f.write('Test Accuracy: %.2f' % gs.score(xTestStd, yTest))
+        f.write('\n')
+        f.write('Precision: %.2f' % precision_score(y_true=yTest, y_pred=yPred, average='micro'))
+        f.write('\n')
+        f.write('Recall: %.2f' % recall_score(y_true=yTest, y_pred=yPred, average='micro'))
+        f.write('\n')
+        f.write('F1: %.2f' % f1_score(y_true=yTest, y_pred=yPred, average='micro'))
+        f.write('\n')
+        f.write('\n')
+        
+    #Looking for two best parameters of standarized
+    
+    lda = LDA(solver='eigen', n_components=2)
+    xTestLda = lda.fit_transform(xTest, yTest)
+    xTrainLda = lda.fit_transform(xTrain, yTrain)
+    
+    #Combining training and testing data
+    
+    xCombinedLda = np.vstack((xTrainLda, xTestLda))
+    yCombinedLda = np.hstack((yTrain,yTest))
+  
+    #plotting decision regions
+  
+    plot_decision_regions(gs, xCombinedLda, yCombinedLda, xTrainLda, yTrain)
+    
+    #Saving plot as an image
+    
+    plt.savefig("EnsembleLearning_plot.png")
+    
+main()
